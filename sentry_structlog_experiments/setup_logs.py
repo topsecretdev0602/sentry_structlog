@@ -10,7 +10,7 @@ from structlog.processors import _figure_out_exc_info
 from .env_vars import PROJECT_ROOT, DJANGO_LOG_LEVEL
 
 
-class PolyMessageHandler(logging.Formatter):
+class StructlogAwareMessageFormatter(logging.Formatter):
     def __init__(self, copy_record: bool = True, **kwargs):
         self.copy_record = copy_record
         super().__init__(**kwargs)
@@ -74,7 +74,7 @@ LOGGING_CONFIG = {
     'disable_existing_loggers': False,
     'formatters': {
         'std': {
-            '()': PolyMessageHandler,
+            '()': StructlogAwareMessageFormatter,
             'format': '[%(asctime)s][%(levelname)s][%(module)s:%(lineno)d] %(message)s'
         },
         'json_formatter': {
