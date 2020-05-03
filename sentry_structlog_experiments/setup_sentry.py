@@ -15,10 +15,12 @@ IGNORE_LOGGERS = [
 def configure():
     for logger in IGNORE_LOGGERS:
         ignore_logger(logger)
+
     logging_integration = LoggingIntegration()
+    attr_map = StructlogAwareMessageFormatter.DEFAULT_ATTR_MAP + (('request_id', 'request_id', None),)
     for attr_name, attr_value in vars(logging_integration).items():
         if isinstance(attr_value, logging.Handler):
-            attr_value.setFormatter(StructlogAwareMessageFormatter(copy_record=False))
+            attr_value.setFormatter(StructlogAwareMessageFormatter(copy_record=False, attr_map=attr_map))
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,

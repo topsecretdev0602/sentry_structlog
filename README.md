@@ -1,9 +1,17 @@
-Just some experiments with a minimal Django app for running [sentry](https://sentry.io/) along with [structlog](structlog.org) json logging setup
+A minimal Django app for running [sentry](https://sentry.io/) along with [structlog](structlog.org) json logging setup
 
-JSON structured messages make sentry issues and breadcrumbs hard to read, but are great for parsing and aggregating in ELK stack. 
+![](./screens/structlog_sentry_trace.png) 
+
+JSON structured messages make Sentry issues and breadcrumbs hard to read, but are great for parsing and aggregating in ELK stack. 
 We do some hacking around with structlog and sentry internals to make them work together nicely
 
-Other related projects:
+- [x] Send plain text string log events instead of json/dict events to Sentry  
+- [x] Send plain text string breadcrumb events instead of json/dict events to Sentry
+- [x] Save traceback to `LogRecord.exc_info` when using structlog so Sentry can extract it
+- [x] Allow copying custom keys from event_dict to LogRecord attributes so Sentry can put it as extra (E.g. see `request_id` in the above screenshot)
+- [ ] Get `'_meta'` key in Sentry event json when using structlog  
+
+Other related projects that attempt to solve this problem:
 
 - [structlog-sentry](https://github.com/kiwicom/structlog-sentry)
 
@@ -44,9 +52,3 @@ Needs Python 3.6+
     - http://0.0.0.0:8000/app/stdlib
 
 7. Go explore the code.
-
----
-
-If all setup is correct, you can get the same stack frames and breadcrumbs from structlog as from logging
-
-![](./screens/structlog_sentry_trace.png) 

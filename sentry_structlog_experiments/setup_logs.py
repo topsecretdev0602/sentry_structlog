@@ -1,6 +1,6 @@
 import logging.config
 import os
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Set
 
 import structlog
 # Potentially dangerous, using library internals, no suitable alternatives for now
@@ -11,8 +11,14 @@ from .env_vars import PROJECT_ROOT, DJANGO_LOG_LEVEL
 
 
 class StructlogAwareMessageFormatter(logging.Formatter):
-    def __init__(self, copy_record: bool = True, **kwargs):
+    DEFAULT_ATTR_MAP: Tuple[Tuple[str, str, Any], ...] = (
+        ('event', 'msg', ''),
+    )
+
+    def __init__(self, copy_record: bool = True, attr_map: Tuple[Tuple[str, str, Any], ...] = DEFAULT_ATTR_MAP,
+                 **kwargs):
         self.copy_record = copy_record
+        self.attr_map = attr_map
         super().__init__(**kwargs)
 
     def format(self, record: logging.LogRecord) -> str:
@@ -20,7 +26,9 @@ class StructlogAwareMessageFormatter(logging.Formatter):
             record = logging.makeLogRecord(record.__dict__)
 
         if isinstance(record.msg, dict):
-            record.msg = record.msg.get('event', '')
+            update_attrs = {target_attr: record.msg.get(dict_key, default_value)
+                            for dict_key, target_attr, default_value in self.attr_map}
+            record.__dict__.update(update_attrs)
 
         return super().format(record=record)
 
