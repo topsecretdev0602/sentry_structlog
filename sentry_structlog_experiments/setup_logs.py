@@ -50,9 +50,6 @@ def wrap_for_process_formatter(logger: logging.Logger, name: str,
     return args, kwargs
 
 
-LOG_FILTER_PATHS = []
-
-
 def add_module_and_lineno(logger: logging.Logger, name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
     # see https://github.com/hynek/structlog/issues/253 for a feature request to get this done better
     frame, module_str = _find_first_app_frame_and_name(additional_ignores=[__name__, 'logging'])
