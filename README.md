@@ -43,4 +43,10 @@ Needs Python 3.6+
     - http://0.0.0.0:8000/app/structlog
     - http://0.0.0.0:8000/app/stdlib
 
-7. Go explore the code. 
+7. Go explore the code.
+
+---
+
+If all setup is correct, you can get the same stack frames and breadcrumbs from structlog as from logging
+
+![](./screens/structlog_sentry_trace.png) 
