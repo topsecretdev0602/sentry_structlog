@@ -1,0 +1,6 @@
+python-dotenv==0.13.0
+django==3.0.5
+structlog==19.2.0
+django-structlog==1.5.2
+sentry-sdk==0.14.3
+structlog-sentry==1.2.2
