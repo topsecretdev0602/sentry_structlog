@@ -1,48 +1,62 @@
 import logging.config
 import os
-from typing import Dict, Any, Union
+from typing import Dict, Any, Tuple
 
 import structlog
+# Potentially dangerous, using library internals, no suitable alternatives for now
+from structlog._frames import _find_first_app_frame_and_name
+from structlog.processors import _figure_out_exc_info
 
 from .env_vars import PROJECT_ROOT, DJANGO_LOG_LEVEL
-from .structlog_sentry_util import SentryJsonProcessor
+
+
+class PolyMessageHandler(logging.Formatter):
+    def __init__(self, copy_record: bool = True, **kwargs):
+        self.copy_record = copy_record
+        super().__init__(**kwargs)
+
+    def format(self, record: logging.LogRecord) -> str:
+        if not isinstance(record.msg, str) and self.copy_record:
+            record = logging.makeLogRecord(record.__dict__)
+
+        if isinstance(record.msg, dict):
+            record.msg = record.msg.get('event', '')
+
+        return super().format(record=record)
+
+
+def format_exc_info(logger: logging.Logger, name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Format exception info but also save it to another key to process in wrap_for_process_formatter
+    """
+    exc_info = event_dict.pop('exc_info', None)
+    if exc_info:
+        event_dict['exc_info'] = _figure_out_exc_info(exc_info)
+        event_dict['_exc_info'] = event_dict['exc_info']
+    return structlog.processors.format_exc_info(logger=logger, name=name, event_dict=event_dict)
+
+
+def wrap_for_process_formatter(logger: logging.Logger, name: str,
+                               event_dict: Dict[str, Any]) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+    """
+    Replacement for structlog.stdlib.ProcessorFormatter.wrap_for_formatter that passes on _exc_info as
+    exc_info to LogRecord.__init__
+    """
+    args, kwargs = structlog.stdlib.ProcessorFormatter.wrap_for_formatter(logger=logger, name=name,
+                                                                          event_dict=event_dict)
+    event_dict = args[0] if args else kwargs.get('event_dict')
+    if event_dict:
+        kwargs['exc_info'] = event_dict.pop('_exc_info', None)
+    return args, kwargs
+
 
 LOG_FILTER_PATHS = []
 
 
-def add_module_and_lineno(logger: Union[logging.Logger, structlog.stdlib.BoundLogger],
-                          name: str,
-                          event_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Add module and line number to the event dict
-    Args:
-        logger(structlog.stdlib.BoundLogger): stuctlog logger
-        name(str): logger method (info/debug/..)
-        event_dict(dict): log event dict
-    Returns:
-        event_dict (dict)
-    """
+def add_module_and_lineno(logger: logging.Logger, name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
     # see https://github.com/hynek/structlog/issues/253 for a feature request to get this done better
-    # noinspection PyProtectedMember,PyUnresolvedReferences
-    frame, module_str = structlog._frames._find_first_app_frame_and_name(additional_ignores=[__name__, 'logging'])
+    frame, module_str = _find_first_app_frame_and_name(additional_ignores=[__name__, 'logging'])
     event_dict['modline'] = f'{module_str}:{frame.f_lineno}'
-    return event_dict
-
-
-def filter_logs(logger: structlog.stdlib.BoundLogger, method_name: str, event_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Drop log events based on the request path
-    Args:
-        logger(structlog.stdlib.BoundLogger): stuctlog logger
-        method_name(str): logger method (info/debug/..)
-        event_dict(dict): log event dict
-    Returns:
-        event_dict (dict)
-    """
-    event_path = event_dict.get('request_path', '')
-    for filter_path in LOG_FILTER_PATHS:
-        if filter_path in event_path:
-            raise structlog.DropEvent
     return event_dict
 
 
@@ -50,7 +64,7 @@ FOREIGN_PRE_CHAIN_PROCESSORS = (  # For logs being emitted from logging.Logger b
     structlog.processors.TimeStamper(fmt='iso'),
     structlog.stdlib.add_log_level,
     structlog.processors.StackInfoRenderer(),
-    structlog.processors.format_exc_info,
+    format_exc_info,
     structlog.processors.UnicodeDecoder(),
     add_module_and_lineno,
 )
@@ -59,6 +73,10 @@ LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
+        'std': {
+            '()': PolyMessageHandler,
+            'format': '[%(asctime)s][%(levelname)s][%(module)s:%(lineno)d] %(message)s'
+        },
         'json_formatter': {
             '()': structlog.stdlib.ProcessorFormatter,
             'processor': structlog.processors.JSONRenderer(),
@@ -76,16 +94,22 @@ LOGGING_CONFIG = {
         }
     },
     'handlers': {
-        'app': {
+        'app_std': {
             'level': DJANGO_LOG_LEVEL,
             'class': 'logging.handlers.WatchedFileHandler',
             'filename': os.path.join(PROJECT_ROOT, 'logs', 'app.log'),
+            'formatter': 'std'
+        },
+        'app_json': {
+            'level': DJANGO_LOG_LEVEL,
+            'class': 'logging.handlers.WatchedFileHandler',
+            'filename': os.path.join(PROJECT_ROOT, 'logs', 'app.json.log'),
             'formatter': 'json_formatter'
         },
     },
     'loggers': {
         'app': {
-            'handlers': ['app'],
+            'handlers': ['app_std', 'app_json'],
             'level': 'DEBUG',
             'propagate': False
         },
@@ -96,17 +120,15 @@ LOGGING_CONFIG = {
 def configure():
     structlog.configure(
         processors=[
-            filter_logs,
             structlog.stdlib.filter_by_level,
             structlog.processors.TimeStamper(fmt='iso'),
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(remove_positional_args=True),
             structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
+            format_exc_info,
             structlog.processors.UnicodeDecoder(),
             add_module_and_lineno,
-            SentryJsonProcessor(level=logging.ERROR)
-            # structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            wrap_for_process_formatter,
         ],
         context_class=structlog.threadlocal.wrap_dict(dict),
         logger_factory=structlog.stdlib.LoggerFactory(),

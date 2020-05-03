@@ -1,5 +1,12 @@
 Just some experiments with a minimal Django app for running [sentry](https://sentry.io/) along with [structlog](structlog.org) json logging setup
 
+JSON structured messages make sentry issues and breadcrumbs hard to read, but are great for parsing and aggregating in ELK stack. 
+We do some hacking around with structlog and sentry internals to make them work together nicely
+
+Other related projects:
+
+- [structlog-sentry](https://github.com/kiwicom/structlog-sentry)
+
 ---
 
 To run (sorry no docker or uwsgi here):
@@ -32,6 +39,8 @@ Needs Python 3.6+
     python manage.py runserver 0.0.0.0:8000
     ```
 
-6. Go to http://0.0.0.0:8000
+6. Go create errors
+    - http://0.0.0.0:8000/app/structlog
+    - http://0.0.0.0:8000/app/stdlib
 
-7. Go explore the code at `app/`, create errors
+7. Go explore the code. 
