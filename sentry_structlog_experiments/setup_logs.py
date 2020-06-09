@@ -1,6 +1,6 @@
 import logging.config
 import os
-from typing import Dict, Any, Tuple, Set
+from typing import Dict, Any, Tuple, NamedTuple, Optional, List
 
 import structlog
 # Potentially dangerous, using library internals, no suitable alternatives for now
@@ -11,24 +11,44 @@ from .env_vars import PROJECT_ROOT, DJANGO_LOG_LEVEL
 
 
 class StructlogAwareMessageFormatter(logging.Formatter):
-    DEFAULT_ATTR_MAP: Tuple[Tuple[str, str, Any], ...] = (
-        ('event', 'msg', ''),
-    )
+    class AttrMapItem(NamedTuple):
+        record_attr_name: str
+        event_dict_key: str
+        default_value: Any
 
-    def __init__(self, copy_record: bool = True, attr_map: Tuple[Tuple[str, str, Any], ...] = DEFAULT_ATTR_MAP,
-                 **kwargs):
+    def __init__(self, copy_record: bool = True, attr_map: Optional[List[AttrMapItem]] = None, **kwargs):
+        """
+        :param copy_record: If to create a copy of the LogRecord object given to `format`
+        :param attr_map: an optional list of AttrMapItem tuples
+        :param kwargs: logging.Formatter.__init__ arguments
+        """
+        if attr_map is None:
+            attr_map = []
         self.copy_record = copy_record
-        self.attr_map = attr_map
+        self.attr_map = attr_map + [
+            StructlogAwareMessageFormatter.AttrMapItem(record_attr_name='msg',
+                                                       event_dict_key='event',
+                                                       default_value='')
+        ]
         super().__init__(**kwargs)
 
     def format(self, record: logging.LogRecord) -> str:
+        """
+        Modify LogRecord object when message is a structlog event dict by copying keys from event_dict into attributes
+        on LogRecord directly
+
+        :param record: LogRecord object
+        :return: formatted message str with inplace edit to record object
+        """
         if not isinstance(record.msg, str) and self.copy_record:
             record = logging.makeLogRecord(record.__dict__)
 
         if isinstance(record.msg, dict):
-            update_attrs = {target_attr: record.msg.get(dict_key, default_value)
-                            for dict_key, target_attr, default_value in self.attr_map}
-            record.__dict__.update(update_attrs)
+            event_dict = record.msg
+            for attr_map_item in self.attr_map:
+                setattr(record,
+                        attr_map_item.record_attr_name,
+                        event_dict.get(attr_map_item.event_dict_key, attr_map_item.default_value))
 
         return super().format(record=record)
 
