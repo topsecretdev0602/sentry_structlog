@@ -2,4 +2,6 @@
 *.py[cod]
 
 .idea/
+.mypy_cache/
+
 logs/*.log
