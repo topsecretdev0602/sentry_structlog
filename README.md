@@ -51,4 +51,4 @@ Needs Python 3.6+
     - http://0.0.0.0:8000/app/structlog
     - http://0.0.0.0:8000/app/stdlib
 
-7. Go explore the code.
+7. Go explore the code at [setup_logs](./sentry_structlog_experiments/setup_logs.py) and [setup_sentry](./sentry_structlog_experiments/setup_sentry.py)
